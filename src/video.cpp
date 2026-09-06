@@ -874,6 +874,8 @@ namespace video {
         {"async_depth"s, 1},
         {"low_delay_brc"s, 1},
         {"low_power"s, 1},
+        {"extbrc"s, &config::video.qsv.qsv_extbrc},
+        {"max_frame_size"s, &config::video.qsv.qsv_max_frame_size},
       },
       {
         // SDR-specific options
@@ -885,6 +887,9 @@ namespace video {
       },
       {
         // YUV444 SDR-specific options
+        // QSV has no 4:4:4 AV1 support, so display_vram_t::is_codec_supported()
+        // rejects the combination before these ever apply. Kept to describe intent
+        // if that gate is ever relaxed.
         {"profile"s, std::to_underlying(qsv::profile_av1_e::high)},
       },
       {
@@ -904,6 +909,9 @@ namespace video {
         {"low_power"s, 1},
         {"recovery_point_sei"s, 0},
         {"pic_timing_sei"s, 0},
+        {"scenario"s, "remotegaming"s},
+        {"extbrc"s, &config::video.qsv.qsv_extbrc},
+        {"max_frame_size"s, &config::video.qsv.qsv_max_frame_size},
       },
       {
         // SDR-specific options
@@ -942,6 +950,9 @@ namespace video {
         {"vcm"s, 1},
         {"pic_timing_sei"s, 0},
         {"max_dec_frame_buffering"s, 1},
+        {"scenario"s, "remotegaming"s},
+        {"extbrc"s, &config::video.qsv.qsv_extbrc},
+        {"max_frame_size"s, &config::video.qsv.qsv_max_frame_size},
       },
       {
         // SDR-specific options
@@ -950,6 +961,8 @@ namespace video {
       {},  // HDR-specific options
       {
         // YUV444 SDR-specific options
+        // As with AV1 above, QSV has no 4:4:4 H.264 support and is_codec_supported()
+        // rejects the combination before this applies.
         {"profile"s, std::to_underlying(qsv::profile_h264_e::high_444p)},
       },
       {},  // YUV444 HDR-specific options

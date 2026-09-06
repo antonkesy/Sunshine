@@ -282,7 +282,6 @@ function add_arch_deps() {
     'libcap'
     'libdrm'
     'libevdev'
-    'libmfx'
     'libpulse'
     'libva'
     'libx11'

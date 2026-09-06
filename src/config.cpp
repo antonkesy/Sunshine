@@ -380,6 +380,11 @@ namespace config {
       _CONVERT_(faster);
       _CONVERT_(veryfast);
 #undef _CONVERT_
+      // The web UI historically wrote "slowest" for this preset, which no other
+      // component understands. Accept it so those configs keep working.
+      if (preset == "slowest"sv) {
+        return veryslow;
+      }
       return std::nullopt;
     }
 
@@ -399,6 +404,23 @@ namespace config {
       if (coder == "cavlc"sv || coder == "vlc"sv) {
         return enabled;
       }
+      return std::nullopt;
+    }
+
+    /**
+     * @brief Parse the extended bitrate control mode from configuration text.
+     *
+     * @param extbrc Extended bitrate control mode selected in the configuration.
+     * @return Parsed value, or `std::nullopt` to leave the oneVPL default in place.
+     */
+    std::optional<int> extbrc_from_view(const std::string_view &extbrc) {
+      if (extbrc == "enabled"sv) {
+        return 1;
+      }
+      if (extbrc == "disabled"sv) {
+        return 0;
+      }
+      // "auto" and anything unrecognized leave the option unset.
       return std::nullopt;
     }
 
@@ -733,6 +755,8 @@ namespace config {
       qsv::medium,  // preset
       qsv::_auto,  // cavlc
       false,  // slow_hevc
+      {},  // extbrc (leave the oneVPL default)
+      {},  // max_frame_size (uncapped)
     },  // qsv
 
     {
@@ -1602,6 +1626,14 @@ namespace config {
     int_f(vars, "qsv_preset", video.qsv.qsv_preset, qsv::preset_from_view);
     int_f(vars, "qsv_coder", video.qsv.qsv_cavlc, qsv::coder_from_view);
     bool_f(vars, "qsv_slow_hevc", video.qsv.qsv_slow_hevc);
+    int_f(vars, "qsv_extbrc", video.qsv.qsv_extbrc, qsv::extbrc_from_view);
+    {
+      auto max_frame_size = video.qsv.qsv_max_frame_size;
+      int_f(vars, "qsv_max_frame_size", max_frame_size);
+      if (!max_frame_size || *max_frame_size > 0) {
+        video.qsv.qsv_max_frame_size = max_frame_size;
+      }
+    }
 
     std::string quality;
     string_f(vars, "amd_quality", quality);

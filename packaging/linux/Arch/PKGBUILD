@@ -38,7 +38,6 @@ depends=(
   'libcap'
   'libdrm'
   'libevdev'
-  'libmfx'
   'libpipewire'
   'libpulse'
   'libva'

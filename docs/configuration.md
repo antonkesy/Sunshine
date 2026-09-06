@@ -2662,6 +2662,79 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### qsv_extbrc
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Enables the extended (software) bitrate control implementation instead of the one built into the GPU.
+            This can improve bitrate accuracy on some hardware, at the cost of a small amount of CPU time.
+            @note{This option only applies when using quicksync [encoder](#encoder).}
+            @note{Support varies by GPU generation and driver. When the runtime does not support it, the
+            option is ignored.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            auto
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            qsv_extbrc = auto
+            @endcode</td>
+    </tr>
+    <tr>
+        <td rowspan="3">Choices</td>
+        <td>auto</td>
+        <td>let the driver decide</td>
+    </tr>
+    <tr>
+        <td>enabled</td>
+        <td>use the extended bitrate control</td>
+    </tr>
+    <tr>
+        <td>disabled</td>
+        <td>use the built-in bitrate control</td>
+    </tr>
+</table>
+
+### qsv_max_frame_size
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            The maximum size, in bytes, of a single encoded frame. Capping this smooths out the large
+            spikes produced by keyframes and scene changes, which can otherwise overwhelm a constrained
+            network link and cause stutter.
+            @note{This option only applies when using quicksync [encoder](#encoder).}
+            @caution{Setting this too low forces the encoder to discard quality to meet the limit, and can
+            produce visible blockiness on keyframes. Leave it unset unless you are troubleshooting network
+            spikes.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            0
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Range</td>
+        <td colspan="2">Any positive integer. A value of 0 or lower leaves the frame size uncapped.</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            qsv_max_frame_size = 131072
+            @endcode</td>
+    </tr>
+</table>
+
 ## AMD AMF Encoder
 
 ### amd_usage

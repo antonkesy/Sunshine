@@ -79,6 +79,8 @@ namespace config {
       std::optional<int> qsv_preset;
       std::optional<int> qsv_cavlc;
       bool qsv_slow_hevc;
+      std::optional<int> qsv_extbrc;  ///< Extended (software) bitrate control; unset leaves the oneVPL default.
+      std::optional<int> qsv_max_frame_size;  ///< Maximum encoded frame size in bytes; unset applies no cap.
     } qsv;  ///< Intel Quick Sync encoder options.
 
     struct {

@@ -16,6 +16,12 @@
 // lib includes
 #include <rs.h>
 
+// ffmpeg includes
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavutil/avutil.h>
+}
+
 // local includes
 #include "confighttp.h"
 #include "display_device.h"
@@ -216,6 +222,12 @@ int main(int argc, char *argv[]) {
   // if anything is logged prior to this point, it will appear in stdout, but not in the log viewer in the UI
   // the version should be printed to the log before anything else
   BOOST_LOG(info) << PROJECT_NAME << " version: " << PROJECT_VERSION << " commit: " << PROJECT_VERSION_COMMIT;
+
+  // The hardware encoders are supplied by FFmpeg, and which ones are actually
+  // available depends on how it was configured. Log that up front so encoder
+  // bug reports can be diagnosed without a rebuild.
+  BOOST_LOG(info) << "FFmpeg version: "sv << av_version_info();
+  BOOST_LOG(debug) << "FFmpeg configuration: "sv << avcodec_configuration();
 
   // Log publisher metadata
   log_publisher_data();

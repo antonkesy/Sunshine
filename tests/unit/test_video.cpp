@@ -11,6 +11,7 @@
 #include <optional>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 // ffmpeg includes
@@ -186,17 +187,83 @@ INSTANTIATE_TEST_SUITE_P(
     std::make_tuple(&video::amdvce.av1, false)
   )
 );
-#endif
-
-using AmfMaxAuSizeConfigParam = std::tuple<std::string_view, std::optional<int>>;
 
 /**
- * @brief Parameterized coverage for parsing and validating the AMF maximum access-unit size.
+ * @brief Parameterized coverage for the QuickSync option tables.
  */
-struct AmfMaxAuSizeConfigTest: BaseTest, testing::WithParamInterface<AmfMaxAuSizeConfigParam> {
+struct QsvCodecOptionsTest: testing::TestWithParam<const video::encoder_t::codec_t *> {};
+
+TEST_P(QsvCodecOptionsTest, TunableOptionsBindToConfig) {
+  const auto *codec = GetParam();
+
+  const auto extbrc = std::ranges::find(codec->common_options, "extbrc"sv, &video::encoder_t::option_t::name);
+  ASSERT_NE(codec->common_options.end(), extbrc);
+  ASSERT_TRUE(std::holds_alternative<std::optional<int> *>(extbrc->value));
+  EXPECT_EQ(&config::video.qsv.qsv_extbrc, std::get<std::optional<int> *>(extbrc->value));
+
+  const auto max_frame_size = std::ranges::find(codec->common_options, "max_frame_size"sv, &video::encoder_t::option_t::name);
+  ASSERT_NE(codec->common_options.end(), max_frame_size);
+  ASSERT_TRUE(std::holds_alternative<std::optional<int> *>(max_frame_size->value));
+  EXPECT_EQ(&config::video.qsv.qsv_max_frame_size, std::get<std::optional<int> *>(max_frame_size->value));
+}
+
+TEST_P(QsvCodecOptionsTest, FallbackOptionsChangeTheConfiguration) {
+  const auto *codec = GetParam();
+
+  // A fallback set that merely repeats a common option wastes the single retry
+  // in make_avcodec_encode_session() on an identical configuration.
+  for (const auto &fallback : codec->fallback_options) {
+    const auto common = std::ranges::find(codec->common_options, fallback.name, &video::encoder_t::option_t::name);
+    if (common == codec->common_options.end()) {
+      continue;
+    }
+
+    if (const auto *common_value = std::get_if<int>(&common->value)) {
+      if (const auto *fallback_value = std::get_if<int>(&fallback.value)) {
+        EXPECT_NE(*common_value, *fallback_value)
+          << "fallback option '" << fallback.name << "' for " << codec->name
+          << " repeats the value already set in common_options";
+      }
+    }
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  QsvCodecOptions,
+  QsvCodecOptionsTest,
+  testing::Values(
+    &video::quicksync.h264,
+    &video::quicksync.hevc,
+    &video::quicksync.av1
+  ),
+  [](const auto &info) {
+    return std::string(info.param->name);
+  }
+);
+
+/**
+ * @brief The scenario hint exists on h264_qsv/hevc_qsv but not on av1_qsv.
+ */
+TEST(QsvScenarioTest, AppliedOnlyToCodecsThatSupportIt) {
+  const auto has_scenario = [](const video::encoder_t::codec_t &codec) {
+    return std::ranges::find(codec.common_options, "scenario"sv, &video::encoder_t::option_t::name) != codec.common_options.end();
+  };
+
+  EXPECT_TRUE(has_scenario(video::quicksync.h264));
+  EXPECT_TRUE(has_scenario(video::quicksync.hevc));
+  EXPECT_FALSE(has_scenario(video::quicksync.av1));
+}
+#endif
+
+/**
+ * @brief Saves and restores global configuration around encoder option parsing tests.
+ *
+ * Derived fixtures reset the option under test in `SetUp()` and then parse a
+ * configuration snippet with `config::apply_config_for_test()`.
+ */
+struct EncoderConfigTest: BaseTest {
   void SetUp() override {
     BaseTest::SetUp();
-    config::video.amd.amd_max_au_size.reset();
     config::stream.file_apps = SUNSHINE_SOURCE_DIR "/tests/unit/test_video.cpp";
   }
 
@@ -211,13 +278,126 @@ struct AmfMaxAuSizeConfigTest: BaseTest, testing::WithParamInterface<AmfMaxAuSiz
     BaseTest::TearDown();
   }
 
-  config::video_t original_video {config::video};  ///< Video configuration restored after each parameterized test.
-  config::audio_t original_audio {config::audio};  ///< Audio configuration restored after each parameterized test.
-  config::stream_t original_stream {config::stream};  ///< Stream configuration restored after each parameterized test.
-  config::nvhttp_t original_nvhttp {config::nvhttp};  ///< HTTP configuration restored after each parameterized test.
-  config::input_t original_input {config::input};  ///< Input configuration restored after each parameterized test.
-  config::sunshine_t original_sunshine {config::sunshine};  ///< Core configuration restored after each parameterized test.
-  decltype(config::modified_config_settings) original_modified_config_settings {config::modified_config_settings};  ///< Modified settings restored after each parameterized test.
+  config::video_t original_video {config::video};  ///< Video configuration restored after each test.
+  config::audio_t original_audio {config::audio};  ///< Audio configuration restored after each test.
+  config::stream_t original_stream {config::stream};  ///< Stream configuration restored after each test.
+  config::nvhttp_t original_nvhttp {config::nvhttp};  ///< HTTP configuration restored after each test.
+  config::input_t original_input {config::input};  ///< Input configuration restored after each test.
+  config::sunshine_t original_sunshine {config::sunshine};  ///< Core configuration restored after each test.
+  decltype(config::modified_config_settings) original_modified_config_settings {config::modified_config_settings};  ///< Modified settings restored after each test.
+};
+
+using QsvPresetConfigParam = std::tuple<std::string_view, std::optional<int>>;
+
+/**
+ * @brief Parameterized coverage for parsing the QuickSync preset.
+ */
+struct QsvPresetConfigTest: EncoderConfigTest, testing::WithParamInterface<QsvPresetConfigParam> {
+  void SetUp() override {
+    EncoderConfigTest::SetUp();
+    config::video.qsv.qsv_preset.reset();
+  }
+};
+
+TEST_P(QsvPresetConfigTest, ParsesEveryValueTheUiCanEmit) {
+  const auto &[setting, expected] = GetParam();
+  config::apply_config_for_test(setting);
+
+  EXPECT_EQ(expected, config::video.qsv.qsv_preset);
+}
+
+// Every value here must stay in sync with the qsv_preset <option> list in
+// src_assets/common/assets/web/configs/tabs/encoders/IntelQuickSyncEncoder.vue.
+// A preset the UI offers but the parser rejects is silently dropped instead of
+// applied, which is exactly the failure this suite guards against.
+INSTANTIATE_TEST_SUITE_P(
+  QsvPresetValues,
+  QsvPresetConfigTest,
+  testing::Values(
+    QsvPresetConfigParam {"qsv_preset = veryfast\n"sv, 7},
+    QsvPresetConfigParam {"qsv_preset = faster\n"sv, 6},
+    QsvPresetConfigParam {"qsv_preset = fast\n"sv, 5},
+    QsvPresetConfigParam {"qsv_preset = medium\n"sv, 4},
+    QsvPresetConfigParam {"qsv_preset = slow\n"sv, 3},
+    QsvPresetConfigParam {"qsv_preset = slower\n"sv, 2},
+    QsvPresetConfigParam {"qsv_preset = veryslow\n"sv, 1},
+    // Legacy value previously written by the web UI.
+    QsvPresetConfigParam {"qsv_preset = slowest\n"sv, 1},
+    QsvPresetConfigParam {"qsv_preset = bogus\n"sv, std::nullopt}
+  )
+);
+
+using QsvMaxFrameSizeConfigParam = std::tuple<std::string_view, std::optional<int>>;
+
+/**
+ * @brief Parameterized coverage for parsing and validating the QuickSync maximum frame size.
+ */
+struct QsvMaxFrameSizeConfigTest: EncoderConfigTest, testing::WithParamInterface<QsvMaxFrameSizeConfigParam> {
+  void SetUp() override {
+    EncoderConfigTest::SetUp();
+    config::video.qsv.qsv_max_frame_size.reset();
+  }
+};
+
+TEST_P(QsvMaxFrameSizeConfigTest, AcceptsOnlyPositiveValues) {
+  const auto &[setting, expected] = GetParam();
+  config::apply_config_for_test(setting);
+
+  EXPECT_EQ(expected, config::video.qsv.qsv_max_frame_size);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  QsvMaxFrameSizeValues,
+  QsvMaxFrameSizeConfigTest,
+  testing::Values(
+    QsvMaxFrameSizeConfigParam {""sv, std::nullopt},
+    QsvMaxFrameSizeConfigParam {"qsv_max_frame_size = 0\n"sv, std::nullopt},
+    QsvMaxFrameSizeConfigParam {"qsv_max_frame_size = -1\n"sv, std::nullopt},
+    QsvMaxFrameSizeConfigParam {"qsv_max_frame_size = 1\n"sv, 1},
+    QsvMaxFrameSizeConfigParam {"qsv_max_frame_size = 131072\n"sv, 131072}
+  )
+);
+
+using QsvExtbrcConfigParam = std::tuple<std::string_view, std::optional<int>>;
+
+/**
+ * @brief Parameterized coverage for parsing the QuickSync extended bitrate control mode.
+ */
+struct QsvExtbrcConfigTest: EncoderConfigTest, testing::WithParamInterface<QsvExtbrcConfigParam> {
+  void SetUp() override {
+    EncoderConfigTest::SetUp();
+    config::video.qsv.qsv_extbrc.reset();
+  }
+};
+
+TEST_P(QsvExtbrcConfigTest, LeavesDriverDefaultUnlessExplicitlySet) {
+  const auto &[setting, expected] = GetParam();
+  config::apply_config_for_test(setting);
+
+  EXPECT_EQ(expected, config::video.qsv.qsv_extbrc);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  QsvExtbrcValues,
+  QsvExtbrcConfigTest,
+  testing::Values(
+    QsvExtbrcConfigParam {""sv, std::nullopt},
+    QsvExtbrcConfigParam {"qsv_extbrc = auto\n"sv, std::nullopt},
+    QsvExtbrcConfigParam {"qsv_extbrc = enabled\n"sv, 1},
+    QsvExtbrcConfigParam {"qsv_extbrc = disabled\n"sv, 0}
+  )
+);
+
+using AmfMaxAuSizeConfigParam = std::tuple<std::string_view, std::optional<int>>;
+
+/**
+ * @brief Parameterized coverage for parsing and validating the AMF maximum access-unit size.
+ */
+struct AmfMaxAuSizeConfigTest: EncoderConfigTest, testing::WithParamInterface<AmfMaxAuSizeConfigParam> {
+  void SetUp() override {
+    EncoderConfigTest::SetUp();
+    config::video.amd.amd_max_au_size.reset();
+  }
 };
 
 TEST_P(AmfMaxAuSizeConfigTest, AcceptsOnlyFfmpegSupportedRange) {

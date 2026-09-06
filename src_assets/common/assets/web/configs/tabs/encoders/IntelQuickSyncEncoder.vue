@@ -22,7 +22,7 @@ const config = ref(props.config)
         <option value="medium">{{ $t('config.qsv_preset_medium') }}</option>
         <option value="slow">{{ $t('config.qsv_preset_slow') }}</option>
         <option value="slower">{{ $t('config.qsv_preset_slower') }}</option>
-        <option value="slowest">{{ $t('config.qsv_preset_slowest') }}</option>
+        <option value="veryslow">{{ $t('config.qsv_preset_slowest') }}</option>
       </select>
     </div>
 
@@ -43,6 +43,25 @@ const config = ref(props.config)
               v-model="config.qsv_slow_hevc"
               default="false"
     ></Checkbox>
+
+    <!-- Extended Bitrate Control -->
+    <div class="mb-3">
+      <label for="qsv_extbrc" class="form-label">{{ $t('config.qsv_extbrc') }}</label>
+      <select id="qsv_extbrc" class="form-select" v-model="config.qsv_extbrc">
+        <option value="auto">{{ $t('config.ffmpeg_auto') }}</option>
+        <option value="enabled">{{ $t('_common.enabled') }}</option>
+        <option value="disabled">{{ $t('_common.disabled') }}</option>
+      </select>
+      <div class="form-text">{{ $t('config.qsv_extbrc_desc') }}</div>
+    </div>
+
+    <!-- Maximum Frame Size -->
+    <div class="mb-3">
+      <label for="qsv_max_frame_size" class="form-label">{{ $t('config.qsv_max_frame_size') }}</label>
+      <input type="number" class="form-control" id="qsv_max_frame_size"
+             placeholder="0" min="0" max="2147483647" v-model="config.qsv_max_frame_size" />
+      <div class="form-text">{{ $t('config.qsv_max_frame_size_desc') }}</div>
+    </div>
   </div>
 </template>
 
