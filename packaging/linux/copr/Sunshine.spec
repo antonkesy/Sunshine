@@ -172,6 +172,9 @@ Requires: pulseaudio-libs >= 10.0
 Requires: qt6-qtbase
 Requires: qt6-qtsvg
 Requires: vulkan-loader
+# Intel QuickSync is optional: the statically linked oneVPL dispatcher loads a runtime
+# implementation at execution time, and falls back to VA-API when none is present.
+Recommends: intel-vpl-gpu-rt
 %endif
 
 %if 0%{?suse_version}
@@ -190,6 +193,8 @@ Requires: libpulse0
 %if !0%{?sle_version}
 Requires: libvulkan1
 %endif
+# See the Intel QuickSync note in the Fedora block above.
+Recommends: intel-vpl-gpu-rt
 %if 0%{?suse_version} <= 1699
 # OpenSUSE Leap: built with Qt5
 Requires: libQt5Svg5

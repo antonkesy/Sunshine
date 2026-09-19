@@ -850,12 +850,13 @@ namespace video {
   };
 #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__linux__)
   /**
    * @brief Quicksync.
    */
   encoder_t quicksync {
     "quicksync"sv,
+  #ifdef _WIN32
     std::make_unique<encoder_platform_formats_avcodec>(
       AV_HWDEVICE_TYPE_D3D11VA,
       AV_HWDEVICE_TYPE_QSV,
@@ -866,6 +867,21 @@ namespace video {
       AV_PIX_FMT_XV30,
       dxgi_init_avcodec_hardware_input_buffer
     ),
+  #else
+    // On Linux the QSV device is derived from the same VA-API device the capture
+    // backends already feed, so no new capture path is needed. 4:4:4 is Windows-only:
+    // vaapi.cpp's DRM-PRIME export path only handles 2-layer (NV12/P010) surfaces.
+    std::make_unique<encoder_platform_formats_avcodec>(
+      AV_HWDEVICE_TYPE_VAAPI,
+      AV_HWDEVICE_TYPE_QSV,
+      AV_PIX_FMT_QSV,
+      AV_PIX_FMT_NV12,
+      AV_PIX_FMT_P010,
+      AV_PIX_FMT_NONE,
+      AV_PIX_FMT_NONE,
+      vaapi_init_avcodec_hardware_input_buffer
+    ),
+  #endif
     {
       // Common options
       {
@@ -947,7 +963,11 @@ namespace video {
         {"low_delay_brc"s, 1},
         {"low_power"s, 1},
         {"recovery_point_sei"s, 0},
+  #ifdef _WIN32
+        // QSV_HAVE_VCM is 0 on non-Windows (libavcodec/qsvenc.h), so qsvenc_h264.c
+        // does not register this AVOption there.
         {"vcm"s, 1},
+  #endif
         {"pic_timing_sei"s, 0},
         {"max_dec_frame_buffering"s, 1},
         {"scenario"s, "remotegaming"s},
@@ -972,9 +992,14 @@ namespace video {
       },
       "h264_qsv"s,
     },
-    PARALLEL_ENCODING | CBR_WITH_VBR | RELAXED_COMPLIANCE | NO_RC_BUF_LIMIT | YUV444_SUPPORT
+    PARALLEL_ENCODING | CBR_WITH_VBR | RELAXED_COMPLIANCE | NO_RC_BUF_LIMIT
+  #ifdef _WIN32
+      | YUV444_SUPPORT
+  #endif
   };
+#endif
 
+#ifdef _WIN32
   /**
    * @brief Amdvce.
    */
@@ -1444,6 +1469,12 @@ namespace video {
 #if defined(__linux__) || defined(linux) || defined(__linux) || defined(__FreeBSD__)
   #ifdef SUNSHINE_BUILD_VULKAN
     &vulkan,
+  #endif
+  #ifdef __linux__
+    // Ranked below Vulkan, which already outranks VA-API on Linux, so this is
+    // additive for anyone whose Vulkan encode probe succeeds. On non-Intel GPUs the
+    // QSV device derivation fails during probing and the encoder is dropped.
+    &quicksync,
   #endif
     &vaapi,
 #endif

@@ -2216,7 +2216,8 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
     <tr>
         <td>quicksync</td>
-        <td>For Intel graphics cards</td>
+        <td>For Intel graphics cards.
+            @note{Applies to Windows and Linux only.}</td>
     </tr>
     <tr>
         <td>amdvce</td>
@@ -2545,6 +2546,15 @@ editing the `conf` file in a text editor. Use the examples as reference.
 </table>
 
 ## Intel QuickSync Encoder
+
+QuickSync is available on Windows and on Linux (x86_64, Intel GPU).
+
+On Linux the encoder additionally needs an Intel VPL runtime installed, since Sunshine
+only ships the dispatcher. Install `vpl-gpu-rt` (Tiger Lake and newer) or `libmfx`
+(earlier generations); package names vary by distribution. Without a runtime Sunshine
+falls back to the VA-API encoder automatically.
+
+@note{4:4:4 chroma subsampling with QuickSync is supported on Windows only.}
 
 ### qsv_preset
 

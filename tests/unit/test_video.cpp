@@ -51,6 +51,8 @@ INSTANTIATE_TEST_SUITE_P(
 #endif
 #ifdef _WIN32
     &video::amdvce,
+#endif
+#if defined(_WIN32) || defined(__linux__)
     &video::quicksync,
 #endif
 #if defined(__linux__) || defined(__FreeBSD__)
@@ -187,7 +189,9 @@ INSTANTIATE_TEST_SUITE_P(
     std::make_tuple(&video::amdvce.av1, false)
   )
 );
+#endif
 
+#if defined(_WIN32) || defined(__linux__)
 /**
  * @brief Parameterized coverage for the QuickSync option tables.
  */
@@ -252,6 +256,24 @@ TEST(QsvScenarioTest, AppliedOnlyToCodecsThatSupportIt) {
   EXPECT_TRUE(has_scenario(video::quicksync.h264));
   EXPECT_TRUE(has_scenario(video::quicksync.hevc));
   EXPECT_FALSE(has_scenario(video::quicksync.av1));
+}
+
+/**
+ * @brief QSV_HAVE_VCM is only set on Windows, so qsvenc_h264.c registers the `vcm`
+ *        AVOption there and nowhere else.
+ */
+TEST(QsvVcmTest, PresentOnlyWhereFfmpegRegistersIt) {
+  const auto has_vcm = std::ranges::find(
+                         video::quicksync.h264.common_options,
+                         "vcm"sv,
+                         &video::encoder_t::option_t::name
+                       ) != video::quicksync.h264.common_options.end();
+
+#ifdef _WIN32
+  EXPECT_TRUE(has_vcm);
+#else
+  EXPECT_FALSE(has_vcm);
+#endif
 }
 #endif
 

@@ -78,6 +78,9 @@ checkdepends=(
 
 optdepends=(
   'libva-mesa-driver: AMD GPU encoding support'
+  'intel-media-driver: Intel GPU VA-API driver'
+  'vpl-gpu-rt: Intel GPU QuickSync encoding support (Tiger Lake and newer)'
+  'libmfx: Intel GPU QuickSync encoding support (pre-Tiger Lake)'
 )
 
 provides=()

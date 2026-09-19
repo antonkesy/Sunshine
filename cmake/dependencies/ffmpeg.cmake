@@ -3,6 +3,26 @@
 #
 include_guard(GLOBAL)
 
+# Resolve a build-deps static library inside FFMPEG_PREPARED_BINARIES.
+#
+# The components do not agree on an install libdir. FFmpeg and the autotools
+# components always land in lib/, but SVT-AV1 uses GNUInstallDirs, which resolves
+# to lib64 on 64-bit non-Debian distros (Arch, Fedora, openSUSE). Probing lib/ only
+# meant a locally built tree silently dropped libSvtAv1Enc.a from the link line and
+# failed much later with undefined references to svt_av1_enc_* from libavcodec.a.
+# CI never saw it because the release tarballs are built on Ubuntu.
+#
+# Sets ${out_var} to the resolved path, or the empty string when not found.
+function(ffmpeg_find_prepared_lib out_var filename)
+    foreach(libdir lib lib64)
+        if(EXISTS "${FFMPEG_PREPARED_BINARIES}/${libdir}/${filename}")
+            set(${out_var} "${FFMPEG_PREPARED_BINARIES}/${libdir}/${filename}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+    set(${out_var} "" PARENT_SCOPE)
+endfunction()
+
 # ffmpeg pre-compiled binaries
 if(NOT DEFINED FFMPEG_PREPARED_BINARIES)
     # Set platform-specific libraries
@@ -120,6 +140,12 @@ if(NOT DEFINED FFMPEG_PREPARED_BINARIES)
         set(HDR10_PLUS_LIBRARY "${FFMPEG_PREPARED_BINARIES}/lib/libhdr10plus.a")
     endif()
 
+    # The oneVPL dispatcher is only shipped in Linux x86_64 build-deps tarballs;
+    # older tarballs and other platforms do not have it.
+    if(EXISTS "${FFMPEG_PREPARED_BINARIES}/lib/libvpl.a")
+        set(VPL_LIBRARY "${FFMPEG_PREPARED_BINARIES}/lib/libvpl.a")
+    endif()
+
     set(FFMPEG_LIBRARIES
         "${FFMPEG_PREPARED_BINARIES}/lib/libavcodec.a"
         "${FFMPEG_PREPARED_BINARIES}/lib/libswscale.a"
@@ -129,6 +155,7 @@ if(NOT DEFINED FFMPEG_PREPARED_BINARIES)
         "${FFMPEG_PREPARED_BINARIES}/lib/libx264.a"
         "${FFMPEG_PREPARED_BINARIES}/lib/libx265.a"
         ${HDR10_PLUS_LIBRARY}
+        ${VPL_LIBRARY}
         ${FFMPEG_PLATFORM_LIBRARIES}
     )
 else()
@@ -146,27 +173,31 @@ else()
         endif()
     endif()
 
-    # Set base FFmpeg libraries (always required)
-    set(FFMPEG_LIBRARIES
-        "${FFMPEG_PREPARED_BINARIES}/lib/libavcodec.a"
-        "${FFMPEG_PREPARED_BINARIES}/lib/libswscale.a"
-        "${FFMPEG_PREPARED_BINARIES}/lib/libavutil.a"
-        "${FFMPEG_PREPARED_BINARIES}/lib/libcbs.a"
-    )
+    # Set base FFmpeg libraries (always required). Link order is significant for
+    # static archives, so keep these ahead of the optional components below.
+    set(FFMPEG_LIBRARIES "")
+    foreach(ffmpeg_lib libavcodec.a libswscale.a libavutil.a libcbs.a)
+        ffmpeg_find_prepared_lib(ffmpeg_lib_path "${ffmpeg_lib}")
+        if(NOT ffmpeg_lib_path)
+            message(FATAL_ERROR
+                "Required FFmpeg library ${ffmpeg_lib} not found under "
+                "${FFMPEG_PREPARED_BINARIES}/lib or ${FFMPEG_PREPARED_BINARIES}/lib64")
+        endif()
+        list(APPEND FFMPEG_LIBRARIES "${ffmpeg_lib_path}")
+    endforeach()
 
-    # Add optional libraries if they exist (e.g., from prebuilt packages)
-    if(EXISTS "${FFMPEG_PREPARED_BINARIES}/lib/libSvtAv1Enc.a")
-        list(APPEND FFMPEG_LIBRARIES "${FFMPEG_PREPARED_BINARIES}/lib/libSvtAv1Enc.a")
-    endif()
-    if(EXISTS "${FFMPEG_PREPARED_BINARIES}/lib/libx264.a")
-        list(APPEND FFMPEG_LIBRARIES "${FFMPEG_PREPARED_BINARIES}/lib/libx264.a")
-    endif()
-    if(EXISTS "${FFMPEG_PREPARED_BINARIES}/lib/libx265.a")
-        list(APPEND FFMPEG_LIBRARIES "${FFMPEG_PREPARED_BINARIES}/lib/libx265.a")
-    endif()
-    if(EXISTS "${FFMPEG_PREPARED_BINARIES}/lib/libhdr10plus.a")
-        list(APPEND FFMPEG_LIBRARIES "${FFMPEG_PREPARED_BINARIES}/lib/libhdr10plus.a")
-    endif()
+    # Add optional libraries if they exist (e.g., from prebuilt packages).
+    # A missing one is reported rather than skipped silently: if FFmpeg was built
+    # with the matching encoder enabled, its absence here is not benign -- it shows
+    # up as undefined references when linking sunshine.
+    foreach(ffmpeg_lib libSvtAv1Enc.a libx264.a libx265.a libhdr10plus.a libvpl.a)
+        ffmpeg_find_prepared_lib(ffmpeg_lib_path "${ffmpeg_lib}")
+        if(ffmpeg_lib_path)
+            list(APPEND FFMPEG_LIBRARIES "${ffmpeg_lib_path}")
+        else()
+            message(STATUS "Optional FFmpeg component not found, skipping: ${ffmpeg_lib}")
+        endif()
+    endforeach()
 
     # Add platform libraries
     list(APPEND FFMPEG_LIBRARIES ${FFMPEG_PLATFORM_LIBRARIES})

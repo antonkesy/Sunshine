@@ -433,9 +433,14 @@
               return el.id !== "vt" && el.id !== "vaapi" && el.id !== "vulkan";
             });
           }
-          if (this.platform === "freebsd" || this.platform === "linux") {
+          if (this.platform === "freebsd") {
             this.tabs = this.tabs.filter((el) => {
               return el.id !== "amd" && el.id !== "qsv" && el.id !== "vt";
+            });
+          }
+          if (this.platform === "linux") {
+            this.tabs = this.tabs.filter((el) => {
+              return el.id !== "amd" && el.id !== "vt";
             });
           }
           if (this.platform === "macos") {

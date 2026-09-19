@@ -429,8 +429,23 @@ namespace va {
       }
 
       va::DRMPRIMESurfaceDescriptor prime;
-      va::VASurfaceID surface = (std::uintptr_t) frame->data[3];
       auto hw_frames_ctx = (AVHWFramesContext *) hw_frames_ctx_buf->data;
+
+      // The quicksync encoder receives AV_PIX_FMT_QSV surfaces, whose data[3] is an
+      // mfxFrameSurface1* rather than a VASurfaceID. Map back down to the VA-API child
+      // surface (hwcontext_qsv.c: qsv_map_from) so it can be exported for EGL.
+      va::VASurfaceID surface;
+      if (hw_frames_ctx->format == AV_PIX_FMT_QSV) {
+        mapped_hwframe.reset(av_frame_alloc());
+        mapped_hwframe->format = AV_PIX_FMT_VAAPI;
+        if (av_hwframe_map(mapped_hwframe.get(), frame, AV_HWFRAME_MAP_WRITE | AV_HWFRAME_MAP_DIRECT)) {
+          BOOST_LOG(error) << "Couldn't map QSV frame to a VAAPI surface"sv;
+          return -1;
+        }
+        surface = (std::uintptr_t) mapped_hwframe->data[3];
+      } else {
+        surface = (std::uintptr_t) frame->data[3];
+      }
 
       auto status = vaExportSurfaceHandle(
         this->va_display,
@@ -508,9 +523,10 @@ namespace va {
     egl::display_t display;  ///< EGL display created from the DRM render node.
     egl::ctx_t ctx;  ///< EGL context used for VA-API frame conversion.
 
-    // This must be destroyed before display_t to ensure the GPU
+    // These must be destroyed before display_t to ensure the GPU
     // driver is still loaded when vaDestroySurfaces() is called.
     frame_t hwframe;  ///< FFmpeg hardware frame backed by a VAAPI surface.
+    frame_t mapped_hwframe;  ///< VAAPI view of hwframe when the encoder uses QSV surfaces.
 
     egl::sws_t sws;  ///< EGL/OpenGL conversion pipeline for VA-API frames.
     egl::nv12_t nv12;  ///< EGL/OpenGL resources used for NV12 output frames.
